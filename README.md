@@ -1,4 +1,4 @@
-# Antigen-resolved-remodeling-of-EBV-specific-CD8-T-cell-immunity-in-multiple-sclerosis
+# Antigen-resolved remodeling of EBV-specific CD8 T-cell immunity in multiple sclerosis
 This repository contains analysis scripts used to process and analyse single-cell RNA sequencing (scRNA-seq) data of EBV-specific CD8+ T cells from individuals with Multiple Sclerosis (MS) and non-MS controls.
 
 The workflow processes 10x Genomics Cell Ranger outputs, performs quality control, integrates TCR and multimer metadata, performs clustering and transcriptional analysis, and analyses TCR repertoire features.
