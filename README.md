@@ -105,17 +105,17 @@ These scripts perform integration, clustering, and module scoring.
 -   Performs SCTransform normalisation
 -   Runs Harmony integration
 -   Performs dimensionality reduction and clustering
--   Relevant figures: 2A-F, 3A-D
+-   Relevant figures: 
 
 **2_Cytotoxicity_module_scoring.R**
 
 -   Calculates cytotoxicity-related transcriptional module scores
--   Relevant figures: 2G, S3
+-   Relevant figures: 
 
 **3_MS_signature_module_score.R**
 
 -   Calculates module scores for MS-associated transcriptional signatures
--   Relevant figures: 4D
+-   Relevant figures: 
 
 # 3. Differential Gene Expression
 
@@ -126,32 +126,32 @@ These scripts define transcriptional signatures and perform differential express
 **1_Baseline_EBV_signature.R**
 
 -   Defines baseline EBV-specific transcriptional signatures
--   Relevant figures: S2A, S2B, Supplementary Table 2
+-   Relevant figures: 
 
 **2_Pseudobulk_comparison_MS_vs_Control_baseline_EBV.R**
 
 -   Performs pseudobulk differential expression analysis comparing MS and control samples
--   Relevant figures: Supplementary Table 3
+-   Relevant figures: 
 
 **3_Stimulated_latent_T_signature.R**
 
 -   Defines transcriptional signatures for stimulated latent EBV-specific T cells
--   Relevant figures: S4B, S5A, Supplementary Table 4
+-   Relevant figures: 
 
 **4_Pseudobulk_comparison_MS_vs_Control_stimulated_latent.R**
 
 -   Performs pseudobulk differential expression analysis for stimulated latent cells
--   Relevant figures: Supplementary Table 5
+-   Relevant figures: 
 
 **5_Weighted_co_expression_analysis.R**
 
 -   Performs weighted gene co-expression analysis
--   Relevant figures: Supplementary Table 6
+-   Relevant figures: 
 
 **6_Pheatmap_MS_signature.R**
 
 -   Generates heatmaps visualising MS-associated gene signatures
--   Relevant figures: 4C
+-   Relevant figures: 
 
 # 4. Multimer and TCR Repertoire Analysis
 
@@ -162,22 +162,22 @@ These scripts analyse EBV multimer binding and TCR repertoire characteristics.
 **1_Estimating_multimer_frequency.R**
 
 -   Estimates frequencies of multimer-positive cells
--   Relevant figures: 1B, 1C, 1D, Supplementary Table 10
+-   Relevant figures: 
 
 **2_Clonal_sharing.R**
 
 -   Identifies shared TCR clones
--   Relevant figures: 1E, S1A
+-   Relevant figures: 
 
 **3_Clonal_diversity.R**
 
 -   Calculates repertoire diversity metrics
--   Relevant figures: S1C
+-   Relevant figures: 
 
 **4_Clonal_expansion.R**
 
 -   Quantifies clonal expansion
--   Relevant figures: S1B
+-   Relevant figures: 
 
 # Data Inputs
 
