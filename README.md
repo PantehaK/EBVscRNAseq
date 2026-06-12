@@ -105,7 +105,7 @@ These scripts perform integration, clustering, and module scoring.
 -   Performs SCTransform normalisation
 -   Runs Harmony integration
 -   Performs dimensionality reduction and clustering
--   Relevant figures: 2A, 2B, 2C, 2F, 3A, 3B, 3C
+-   Relevant figures: 2A-F, 3A-D
 
 **2_Cytotoxicity_module_scoring.R**
 
