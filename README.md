@@ -10,7 +10,7 @@ All analyses were performed in **R v4.5.0** using Seurat-based workflows.
 The repository is organised into directories corresponding to major stages of the analysis pipeline.
 
 ```         
-Scripts/
+Repository/
 │
 ├── Quality_control/
 ├── Clustering/
