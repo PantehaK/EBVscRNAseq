@@ -181,7 +181,7 @@ These scripts analyse EBV multimer binding and TCR repertoire characteristics.
 
 # Data Inputs
 
-Raw sequencing data are not included in this repository due to file size constraints. FASTQ files as well as final metadata single-cell matrices will be available to download from https://zenodo.org/ 
+Raw sequencing data are not included in this repository due to file size constraints. FASTQ files as well as final metadata single-cell matrices will be available to download from GEO repository 
 
 Required input data include:
 
