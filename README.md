@@ -1,10 +1,6 @@
 ---
 title: "Antigen-resolved remodelling of EBV-specific CD8+ T cell immunity in multiple sclerosis"
 author: "Panteha Khaledi"
-output:
-  html_document:
-    toc: true
-    toc_depth: 3
 ---
 
 # Project Overview
