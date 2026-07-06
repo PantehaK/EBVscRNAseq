@@ -1,8 +1,3 @@
-
-# Antigen-resolved remodelling of EBV-specific CD8+ T cell immunity in multiple sclerosis
-## author: Panteha Khaledi
-
-
 # Project Overview
 
 This repository contains analysis scripts used to process and analyse single-cell RNA sequencing (scRNA-seq) data of EBV-specific CD8+ T cells from individuals with Multiple Sclerosis (MS) and non-MS controls.
