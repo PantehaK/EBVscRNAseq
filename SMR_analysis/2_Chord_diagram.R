@@ -17,8 +17,8 @@
 #     5. Summary tables for manuscript/supplementary reporting.
 #
 # SMR data availability:
-#   The SMR analysis data used as input for this workflow are available on
-#   Zenodo.org.
+#   The SMR analysis data used as input for this workflow are available on:
+#   10.5281/zenodo.21231045
 #
 # Pseudobulk input:
 #   The stimulated latent MS-vs-Control pseudobulk result table should contain
