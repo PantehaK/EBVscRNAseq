@@ -26,11 +26,11 @@
 # Expected inputs:
 #   - 8_merged_ebv_vdjs.csv
 #   - 8_merged_EBV_CD8_samples_only.rds
-#   - EBV_multimer_information.xlsx (available on Zenodo.org)
-#   - Tetramer_HLA_match.xlsx (available on Zenodo.org)
-#   - HLA_information.xlsx (available on Zenodo.org)
+#   - EBV_multimer_information.xlsx (available on 10.5281/zenodo.21231183)
+#   - Tetramer_HLA_match.xlsx (available on 10.5281/zenodo.21231183)
+#   - HLA_information.xlsx (available on 10.5281/zenodo.21231183)
 #
-# Manual QC inputs (available in Supplementary_inputs_for_scripts on Zenodo.org):
+# Manual QC inputs (available in Supplementary_inputs_for_scripts on 10.5281/zenodo.21231183):
 #   - Conflicting_clones_per_sample_post_vdjdb.xlsx
 #   - global_conflicting_TCRs_post_vdjdb.csv
 #
