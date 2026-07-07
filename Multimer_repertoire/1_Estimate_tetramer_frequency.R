@@ -21,7 +21,7 @@
 #   - Paths are intentionally generic for GitHub.
 #   - Update the config block before running.
 #   - Tetramer counts are detected-only counts from the GEMEBV object.
-#   - Corrected tetramer frequencies are plotted from Source_data.xlsx.
+#   - Corrected tetramer frequencies are plotted from Source_data.xlsx Fig 1B.
 #   - In the manuscript/source-data workflow, corrected frequencies were calculated as:
 #
 #       (tetramer cells / aligned cells) *
@@ -29,9 +29,9 @@
 #
 #   - HLA-matched but undetected tetramers were assigned 1e-5 for plotting on a
 #     log10 scale.
-#   - Participant HLA information can be found in Supplementary Table 1.
+#   - Participant HLA information can be found in Table S1.
 #   - PBMC count, number of cells sequenced and aligned can be found in
-#     Supplementary Table 15.
+#     Table S15.
 #
 # ==============================================================================
 
