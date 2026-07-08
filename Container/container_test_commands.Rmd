@@ -1,0 +1,94 @@
+# Container Test Commands
+
+This file records basic commands used to test the reproducible Apptainer/Singularity container for the EBV-MS single-cell RNA-seq analysis.
+
+## Container image
+
+The final container image is:
+
+``` text
+EBV_snRNAseq_v4.sif
+```
+
+The image is hosted on Docker Hub as an OCI artifact:
+
+``` text
+oras://registry-1.docker.io/pantehak/ebv_snrnaseq_v4:v4
+```
+
+## Pull container from Docker Hub
+
+``` bash
+apptainer pull EBV_snRNAseq_v4.sif oras://registry-1.docker.io/pantehak/ebv_snrnaseq_v4:v4
+```
+
+## Test that the container launches
+
+``` bash
+apptainer exec --cleanenv EBV_snRNAseq_v4.sif Rscript -e "sessionInfo()"
+```
+
+Expected R version:
+
+``` text
+R version 4.5.0
+```
+
+## Test with project bind path
+
+On Rosalind, project data were stored under:
+
+``` text
+/data/menzies_projects/ms-epi
+```
+
+The container was tested using this bind path:
+
+``` bash
+apptainer exec --cleanenv \
+  --bind /data/menzies_projects/ms-epi:/data/menzies_projects/ms-epi \
+  EBV_snRNAseq_v4.sif \
+  Rscript -e "sessionInfo()"
+```
+
+## Example script execution
+
+Example command for running an analysis script through the container:
+
+``` bash
+apptainer exec --cleanenv \
+  --bind /data/menzies_projects/ms-epi:/data/menzies_projects/ms-epi \
+  EBV_snRNAseq_v4.sif \
+  Rscript Scripts/DEG_analysis/5_Stimulated_MS_vs_control.R
+```
+
+Additional example scripts:
+
+``` bash
+apptainer exec --cleanenv \
+  --bind /data/menzies_projects/ms-epi:/data/menzies_projects/ms-epi \
+  EBV_snRNAseq_v4.sif \
+  Rscript Scripts/MS_signature/3_Pheatmap_hierarchial_clustering.R
+```
+
+``` bash
+apptainer exec --cleanenv \
+  --bind /data/menzies_projects/ms-epi:/data/menzies_projects/ms-epi \
+  EBV_snRNAseq_v4.sif \
+  Rscript Scripts/Clustering/4_feature_plots.R
+```
+
+## Notes
+
+The bind path should be modified if the data are stored in a different location.
+
+For example, if the project data are stored in `/path/to/project`, use:
+
+``` bash
+apptainer exec --cleanenv \
+  --bind /path/to/project:/path/to/project \
+  EBV_snRNAseq_v4.sif \
+  Rscript path/to/script.R
+```
+
+The `renv.lock` file is included in the repository to document R package versions, but the full reproducible environment is provided by the Apptainer container.
