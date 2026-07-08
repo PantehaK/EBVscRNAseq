@@ -69,8 +69,8 @@ On systems where the project data are stored in a different location, users shou
 The container recipe and build script used to generate the image are provided in:
 
 ```text
-container/scRNAseq_v4.def
-container/EBV_scRNAseq_docker.sh
+Container/scRNAseq_v4.def
+Container/EBV_scRNAseq_docker.sh
 ```
 
 The `renv.lock` file is also included to document the R package versions used in the project. However, `renv.lock` alone is not sufficient to fully reproduce the environment because the analysis also depends on system libraries and command-line tools included in the container.
@@ -125,9 +125,9 @@ This GitHub repository includes:
 
 ```text
 renv.lock
-container/scRNAseq_v4.def
-container/EBV_scRNAseq_docker.sh
-Scripts subfolders/
+Container/scRNAseq_v4.def
+Container/EBV_scRNAseq_docker.sh
+Script subfolders/
 README.Rmd
 README.md
 sessionInfo.txt
