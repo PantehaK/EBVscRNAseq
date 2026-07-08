@@ -1,0 +1,118 @@
+Bootstrap: docker
+From: rocker/r-ver:4.5.0
+
+%labels
+    Author Yuan Zhou
+    Version v4
+    Description "HPC scRNAseq analysis container: R + renv + SMR"
+
+# ----------------------------------------------------------------------
+# Copy renv metadata into the image at build time
+#
+# NOTE:
+# 1. These source paths must exist on the build host.
+# 2. If you do not have a renv/ folder, remove that line.
+# ----------------------------------------------------------------------
+%files
+    /data/menzies_projects/ms-epi/tmp/PantehaK/Scripts/renv.lock /opt/project/renv.lock
+    /data/menzies_projects/ms-epi/tmp/PantehaK/Scripts/renv /opt/project/renv
+    /data/menzies_projects/ms-epi/final/software/smr_v1.3.1_linux_x86_64_static /opt/project/smr
+
+%post
+    set -e
+
+    echo ">>> Creating directories"
+    mkdir -p /opt/project
+    mkdir -p /opt/renv
+    mkdir -p /root
+    mkdir -p /workspace
+    mkdir -p /scratch
+
+    export HOME=/root
+    export WORKDIR=/opt/project
+    export RENV_PROJECT=${WORKDIR}
+    export RENV_PATHS_ROOT=/opt/renv
+
+    echo ">>> Installing system dependencies"
+    
+    apt-get update && apt-get install -y --no-install-recommends \
+    wget \
+    unzip \
+    ca-certificates \
+    build-essential \
+    gfortran \
+    git \
+    make \
+    pkg-config \
+    bzip2 \
+    zlib1g-dev \
+    libbz2-dev \
+    liblzma-dev \
+    libcurl4-openssl-dev \
+    libssl-dev \
+    libxml2-dev \
+    libpcre2-dev \
+    libicu-dev \
+    libgit2-dev \
+    libglpk-dev \
+    libgmp-dev \
+    libmpfr-dev \
+    libblas-dev \
+    liblapack-dev \
+    libxt-dev \
+    libharfbuzz-dev \
+    libfribidi-dev \
+    libfreetype6-dev \
+    libpng-dev \
+    libjpeg-dev \
+    libtiff5-dev \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+    
+    echo ">>> Copy SMR_v1.3"
+    mv /opt/project/smr /usr/local/bin/smr
+    chmod +x /usr/local/bin/smr
+
+    echo ">>> Installing renv"
+    Rscript -e "install.packages('renv', repos='https://cloud.r-project.org')"
+
+    echo ">>> Restoring R packages with renv"
+    Rscript -e " \
+        Sys.setenv(HOME='/root'); \
+        Sys.setenv(RENV_PROJECT='/opt/project'); \
+        Sys.setenv(RENV_PATHS_ROOT='/opt/renv'); \
+        options(renv.consent = TRUE, repos = c(CRAN = 'https://cloud.r-project.org')); \
+        setwd('/opt/project'); \
+        renv::restore(prompt = FALSE) \
+    "
+
+    echo ">>> Build finished"
+
+%environment
+    export LC_ALL=C.UTF-8
+    export LANG=C.UTF-8
+
+    # Stable runtime home inside container
+    export HOME=/root
+
+    # Project and renv paths
+    export WORKDIR=/opt/project
+    export RENV_PROJECT=/opt/project
+    export RENV_PATHS_ROOT=/opt/renv
+
+%runscript
+    echo "Container ready: R + renv + smr"
+    echo "Project files are in /opt/project"
+    echo "You may want to bind your working directory, for example:"
+    echo "  apptainer exec --bind /data:/data --bind /scratch:/scratch image.sif bash"
+    exec /bin/bash
+
+%test
+    set -e
+    echo ">>> Testing R"
+    R --version
+
+    echo ">>> Testing renv"
+    Rscript -e "cat('renv version:', as.character(packageVersion('renv')), '\n')"
+
+    echo ">>> All tests passed"
