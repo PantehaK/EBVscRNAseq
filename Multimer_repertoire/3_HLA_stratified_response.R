@@ -1,52 +1,101 @@
 #!/usr/bin/env Rscript
 
 # ==============================================================================
-# Dot-level frequency tables by HLA A2/B7/DR15 combination
+# Figures S1B-C: HLA A2/B7/DR15 frequency analysis
 # ==============================================================================
 #
-# Purpose:
-#   This script creates source-data tables for latent-specific CD8+ T-cell
-#   frequency by HLA-A2, HLA-B7 and HLA-DR15 combination.
+# Description
+#   Generates dot-level tables, descriptive summaries and non-parametric
+#   statistical tests for latent-specific CD8+ T-cell frequency across
+#   HLA-A2, HLA-B7 and HLA-DR15 carrier combinations.
 #
-#   It exports:
-#     1. One row per dot for the pooled HLA-combination graph.
-#     2. One row per dot for the cohort-split MS vs Control graph.
-#     3. Counts by HLA condition.
-#     4. Counts by HLA condition and cohort.
-#     5. Descriptive summaries by HLA condition.
-#     6. Descriptive summaries by HLA condition and cohort.
-# Input: 
-#     - Uses correlation_variables also available in source_data.xlsx sheet FigS1A-C
-# HLA grouping:
-#   The following non-triple-negative groups are retained:
-#     - A2+B7+DR15+
-#     - A2+B7+DR15-
-#     - A2+B7-DR15+
-#     - A2+B7-DR15-
-#     - A2-B7+DR15+
-#     - A2-B7+DR15-
-#     - A2-B7-DR15+
+# Statistical tests
+#   - Kruskal-Wallis omnibus tests:
+#       * pooled
+#       * Control only
+#       * MS only
+#   - Pairwise two-sided Wilcoxon rank-sum tests between HLA combinations:
+#       * pooled
+#       * Control only
+#       * MS only
+#   - Two-sided Wilcoxon rank-sum tests comparing MS versus Control within
+#     each HLA combination.
 #
-#   Triple-negative participants are excluded:
-#     - A2-B7-DR15-
+# Multiple testing
+#   Raw P-values and Benjamini-Hochberg FDR-adjusted P-values are exported.
 #
-# BioRender note:
-#   The exported dot-level source-data tables from this script were imported into
-#   BioRender.com for graphing and statistical testing.
+# Usage
+#   From the repository root:
 #
-# Notes:
-#   - Paths are intentionally generic for GitHub.
-#   - Update the config block before running.
-#   - Raw frequency is exported as T_cell_freq.
-#   - A log10-transformed plotting value is also exported as T_cell_freq_log10.
-#   - No graphing or statistical testing is performed in this script.
+#   Rscript scripts/figure_s1bc_hla_analysis.R
+#
+#   Or specify the input, output directory and Excel sheet:
+#
+#   Rscript scripts/figure_s1bc_hla_analysis.R \
+#     data/source_data_Fig.S1B-C.xlsx \
+#     results/figure_s1bc_hla \
+#     Full
+#
+# Positional arguments
+#   1. Input Excel file
+#      Default: data/source_data_Fig.S1B-C.xlsx
+#
+#   2. Output directory
+#      Default: results/figure_s1bc_hla
+#
+#   3. Excel sheet name or number
+#      Default: Full
+#
+# Required input columns
+#   T_cell_freq
+#   cohort
+#   HLA-A2
+#   HLA-B7
+#   HLA-DR15
+#
+# Sample identifier column
+#   One of: sample, id, ID
+#
+# Outputs
+#   - dot-level CSV tables
+#   - count and summary CSV tables
+#   - statistical-result CSV tables
+#   - one Excel workbook containing all tables
+#   - session_info.txt
 #
 # ==============================================================================
 
 
-# ----------------------------- #
-# 0. Load packages
-# ----------------------------- #
+# ------------------------------------------------------------------------------
+# 1. Dependencies
+# ------------------------------------------------------------------------------
+
+required_packages <- c(
+  "readxl",
+  "dplyr",
+  "tidyr",
+  "tibble",
+  "stringr",
+  "openxlsx",
+  "purrr"
+)
+
+missing_packages <- required_packages[
+  !vapply(
+    required_packages,
+    requireNamespace,
+    quietly = TRUE,
+    FUN.VALUE = logical(1)
+  )
+]
+
+if (length(missing_packages) > 0) {
+  stop(
+    "Missing required R packages: ",
+    paste(missing_packages, collapse = ", "),
+    "\nInstall them before running this script."
+  )
+}
 
 suppressPackageStartupMessages({
   library(readxl)
@@ -55,120 +104,77 @@ suppressPackageStartupMessages({
   library(tibble)
   library(stringr)
   library(openxlsx)
-  library(readr)
+  library(purrr)
 })
 
 
-# ----------------------------- #
-# 1. User configuration
-# ----------------------------- #
+# ------------------------------------------------------------------------------
+# 2. Command-line arguments and paths
+# ------------------------------------------------------------------------------
 
-config <- list(
-  
-  # Input Excel file
-  input_file = "path/to/correlation_variables.xlsx",
-  
-  # Input sheet
-  input_sheet = "Full",
-  
-  # Output directory
-  output_dir = "outputs/HLA_A2_B7_DR15_dot_level_tables",
-  
-  # Column names in the input file
-  frequency_col = "T_cell_freq",
-  cohort_col = "cohort",
-  hla_a2_col = "HLA-A2",
-  hla_b7_col = "HLA-B7",
-  hla_dr15_col = "HLA-DR15",
-  
-  # Candidate sample/donor column names.
-  # The first one found will be used.
-  sample_col_candidates = c("sample", "id", "ID", "donor_id", "participant_id"),
-  
-  # Pseudocount used only to create the plotting/log-transformed value.
-  # Raw frequency remains unchanged.
-  pseudocount = 0.001,
-  
-  # Cohort labels
-  control_label = "Control",
-  ms_label = "MS",
-  
-  # If TRUE, unresolved non-missing HLA strings are treated as positive.
-  # Use FALSE for stricter handling.
-  treat_unresolved_hla_as_positive = FALSE,
-  
-  # Output files
-  pooled_dot_csv = "dot_level_frequencies_by_HLA_condition_pooled.csv",
-  cohort_dot_csv = "dot_level_frequencies_by_HLA_condition_and_cohort.csv",
-  counts_hla_csv = "counts_by_HLA_condition.csv",
-  counts_hla_cohort_csv = "counts_by_HLA_condition_and_cohort.csv",
-  summary_hla_csv = "summary_frequency_by_HLA_condition.csv",
-  summary_hla_cohort_csv = "summary_frequency_by_HLA_condition_and_cohort.csv",
-  excluded_rows_csv = "excluded_rows_missing_or_triple_negative.csv",
-  workbook_xlsx = "HLA_A2_B7_DR15_dot_level_frequency_tables.xlsx",
-  session_info_file = "sessionInfo_HLA_A2_B7_DR15_dot_level_tables.txt"
+args <- commandArgs(trailingOnly = TRUE)
+
+input_file <- if (length(args) >= 1) {
+  args[[1]]
+} else {
+  file.path("data", "source_data_Fig.S1B-C.xlsx")
+}
+
+out_dir <- if (length(args) >= 2) {
+  args[[2]]
+} else {
+  file.path("results", "figure_s1bc_hla")
+}
+
+input_sheet <- if (length(args) >= 3) {
+  if (grepl("^[0-9]+$", args[[3]])) {
+    as.integer(args[[3]])
+  } else {
+    args[[3]]
+  }
+} else {
+  "Full"
+}
+
+if (!file.exists(input_file)) {
+  stop(
+    "Input file does not exist: ",
+    input_file,
+    "\nRun the script from the repository root or provide the input path explicitly."
+  )
+}
+
+dir.create(
+  out_dir,
+  recursive = TRUE,
+  showWarnings = FALSE
+)
+
+pseudocount <- 0.001
+
+session_info_file <- file.path(
+  out_dir,
+  "session_info.txt"
 )
 
 
-# ----------------------------- #
-# 2. Helper functions
-# ----------------------------- #
+# ------------------------------------------------------------------------------
+# 3. Load data
+# ------------------------------------------------------------------------------
 
-create_dir <- function(path) {
-  dir.create(path, showWarnings = FALSE, recursive = TRUE)
-}
+message("Reading input file: ", input_file)
+message("Using Excel sheet: ", input_sheet)
 
+dt <- readxl::read_excel(
+  path = input_file,
+  sheet = input_sheet
+)
 
-read_input_excel <- function(input_file, input_sheet) {
-  
-  if (!file.exists(input_file)) {
-    stop("Input file does not exist: ", input_file)
-  }
-  
-  readxl::read_excel(input_file, sheet = input_sheet)
-}
+# ------------------------------------------------------------------------------
+# 4. Helper functions
+# ------------------------------------------------------------------------------
 
-
-check_required_columns <- function(df, required_cols) {
-  
-  missing_cols <- setdiff(required_cols, colnames(df))
-  
-  if (length(missing_cols) > 0) {
-    stop(
-      "Missing required columns: ",
-      paste(missing_cols, collapse = ", ")
-    )
-  }
-  
-  invisible(TRUE)
-}
-
-
-find_first_existing_col <- function(df, candidates) {
-  
-  hit <- candidates[candidates %in% colnames(df)]
-  
-  if (length(hit) == 0) {
-    return(NA_character_)
-  }
-  
-  hit[1]
-}
-
-
-to_numeric_clean <- function(x) {
-  
-  z <- trimws(as.character(x))
-  z[z %in% c("", "NA", "N/A", "na", "n/a", "NaN", "nan", "null", "NULL")] <- NA
-  z <- gsub(",", "", z)
-  z <- gsub("<", "", z)
-  z <- gsub(">", "", z)
-  
-  suppressWarnings(as.numeric(z))
-}
-
-
-to_binary_hla <- function(x, treat_unresolved_as_positive = FALSE) {
+to_binary_hla <- function(x) {
   
   if (is.logical(x)) {
     return(ifelse(is.na(x), NA_real_, as.numeric(x)))
@@ -179,7 +185,7 @@ to_binary_hla <- function(x, treat_unresolved_as_positive = FALSE) {
   }
   
   z <- tolower(trimws(as.character(x)))
-  z[z %in% c("", "na", "n/a", "nan", "null", "none")] <- NA
+  z[z %in% c("", "na", "n/a", "nan", "null")] <- NA
   
   out <- rep(NA_real_, length(z))
   
@@ -193,36 +199,15 @@ to_binary_hla <- function(x, treat_unresolved_as_positive = FALSE) {
     "non-carrier", "absent", "false", "-"
   )] <- 0
   
+  # If anything unresolved but non-missing remains, assume present.
+  # Remove this if your HLA columns are definitely clean 0/1.
   unresolved <- is.na(out) & !is.na(z)
-  
-  if (any(unresolved) && isTRUE(treat_unresolved_as_positive)) {
-    out[unresolved] <- 1
-  }
+  out[unresolved] <- 1
   
   out
 }
 
-
-normalise_cohort <- function(x, control_label = "Control", ms_label = "MS") {
-  
-  z <- tolower(trimws(as.character(x)))
-  z[z %in% c("", "na", "n/a", "nan", "null", "none")] <- NA
-  
-  out <- rep(NA_character_, length(z))
-  
-  out[z %in% c("1", "ms", "pwms", "rrms", "multiple sclerosis", "case", "patient")] <- ms_label
-  
-  out[z %in% c(
-    "0", "control", "controls", "ctrl", "healthy control",
-    "healthy controls", "hc", "nms", "non-ms", "nonms"
-  )] <- control_label
-  
-  factor(out, levels = c(control_label, ms_label))
-}
-
-
 pm <- function(x) {
-  
   case_when(
     x == 1 ~ "+",
     x == 0 ~ "-",
@@ -230,80 +215,42 @@ pm <- function(x) {
   )
 }
 
-
-format_range <- function(x1, x2, digits = 6) {
-  
-  if (is.na(x1) || is.na(x2)) {
-    return(NA_character_)
-  }
-  
-  paste0(round(x1, digits), " - ", round(x2, digits))
-}
-
-
-summarise_frequency <- function(df, group_cols) {
-  
-  df %>%
-    group_by(across(all_of(group_cols))) %>%
-    summarise(
-      n = n(),
-      n_zero = sum(T_cell_freq == 0, na.rm = TRUE),
-      mean = mean(T_cell_freq, na.rm = TRUE),
-      sd = sd(T_cell_freq, na.rm = TRUE),
-      sem = sd / sqrt(n),
-      median = median(T_cell_freq, na.rm = TRUE),
-      q1 = quantile(T_cell_freq, 0.25, na.rm = TRUE),
-      q3 = quantile(T_cell_freq, 0.75, na.rm = TRUE),
-      min_value = min(T_cell_freq, na.rm = TRUE),
-      max_value = max(T_cell_freq, na.rm = TRUE),
-      IQR = format_range(q1, q3),
-      min_max = format_range(min_value, max_value),
-      .groups = "drop"
-    ) %>%
-    arrange(across(all_of(group_cols)))
-}
-
-
-# ----------------------------- #
-# 3. Load data and check columns
-# ----------------------------- #
-
-create_dir(config$output_dir)
-
-dt <- read_input_excel(
-  input_file = config$input_file,
-  input_sheet = config$input_sheet
-)
-
-dt <- as.data.frame(dt)
-colnames(dt) <- trimws(colnames(dt))
+# ============================================================
+# Check required columns
+# ============================================================
 
 required_cols <- c(
-  config$frequency_col,
-  config$cohort_col,
-  config$hla_a2_col,
-  config$hla_b7_col,
-  config$hla_dr15_col
+  "T_cell_freq",
+  "cohort",
+  "HLA-A2",
+  "HLA-B7",
+  "HLA-DR15"
 )
 
-check_required_columns(dt, required_cols)
+missing_cols <- setdiff(required_cols, colnames(dt))
 
-sample_col <- find_first_existing_col(
-  df = dt,
-  candidates = config$sample_col_candidates
-)
-
-if (is.na(sample_col)) {
+if (length(missing_cols) > 0) {
   stop(
-    "Could not find sample column. Tried: ",
-    paste(config$sample_col_candidates, collapse = ", ")
+    "Missing required columns: ",
+    paste(missing_cols, collapse = ", ")
   )
 }
 
+# Sample column can be sample, id, or ID
+sample_col <- case_when(
+  "sample" %in% colnames(dt) ~ "sample",
+  "id" %in% colnames(dt) ~ "id",
+  "ID" %in% colnames(dt) ~ "ID",
+  TRUE ~ NA_character_
+)
 
-# ----------------------------- #
-# 4. Create HLA-combination groups
-# ----------------------------- #
+if (is.na(sample_col)) {
+  stop("Could not find sample column. Expected one of: sample, id, ID")
+}
+
+# ============================================================
+# Create HLA-combination groups
+# ============================================================
 
 hla_condition_levels <- c(
   "A2+B7+DR15+",
@@ -315,59 +262,46 @@ hla_condition_levels <- c(
   "A2-B7-DR15+"
 )
 
-prepared_df <- dt %>%
+dot_df <- dt %>%
   mutate(
     sample = as.character(.data[[sample_col]]),
     
-    T_cell_freq = to_numeric_clean(.data[[config$frequency_col]]),
-    
-    HLA_A2 = to_binary_hla(
-      .data[[config$hla_a2_col]],
-      treat_unresolved_as_positive = config$treat_unresolved_hla_as_positive
+    T_cell_freq = suppressWarnings(
+      as.numeric(
+        gsub(",", "", trimws(as.character(T_cell_freq)))
+      )
     ),
     
-    HLA_B7 = to_binary_hla(
-      .data[[config$hla_b7_col]],
-      treat_unresolved_as_positive = config$treat_unresolved_hla_as_positive
-    ),
+    HLA_A2 = to_binary_hla(`HLA-A2`),
+    HLA_B7 = to_binary_hla(`HLA-B7`),
+    HLA_DR15 = to_binary_hla(`HLA-DR15`),
     
-    HLA_DR15 = to_binary_hla(
-      .data[[config$hla_dr15_col]],
-      treat_unresolved_as_positive = config$treat_unresolved_hla_as_positive
+    cohort_label = case_when(
+      cohort == 1 ~ "MS",
+      cohort == 0 ~ "Control",
+      as.character(cohort) %in% c("MS", "ms") ~ "MS",
+      as.character(cohort) %in% c("Control", "Controls", "control", "controls") ~ "Control",
+      TRUE ~ NA_character_
     ),
+    cohort_label = factor(cohort_label, levels = c("Control", "MS")),
     
-    cohort_label = normalise_cohort(
-      .data[[config$cohort_col]],
-      control_label = config$control_label,
-      ms_label = config$ms_label
-    ),
-    
-    HLA_condition_raw = paste0(
+    HLA_condition = paste0(
       "A2", pm(HLA_A2),
       "B7", pm(HLA_B7),
       "DR15", pm(HLA_DR15)
     ),
     
-    HLA_condition_raw = ifelse(
+    HLA_condition = ifelse(
       is.na(HLA_A2) | is.na(HLA_B7) | is.na(HLA_DR15),
       NA_character_,
-      HLA_condition_raw
+      HLA_condition
     ),
     
-    exclusion_reason = case_when(
-      is.na(sample) | sample == "" ~ "Missing sample ID",
-      is.na(cohort_label) ~ "Missing or unrecognised cohort",
-      is.na(T_cell_freq) ~ "Missing T_cell_freq",
-      !is.na(T_cell_freq) & T_cell_freq < 0 ~ "Negative T_cell_freq",
-      is.na(HLA_A2) | is.na(HLA_B7) | is.na(HLA_DR15) ~ "Missing or unrecognised HLA status",
-      HLA_condition_raw == "A2-B7-DR15-" ~ "Triple-negative HLA combination excluded",
-      TRUE ~ NA_character_
-    ),
-    
+    # Exclude triple negatives
     HLA_condition = ifelse(
-      HLA_condition_raw == "A2-B7-DR15-",
+      HLA_condition == "A2-B7-DR15-",
       NA_character_,
-      HLA_condition_raw
+      HLA_condition
     ),
     
     HLA_condition = factor(
@@ -375,31 +309,25 @@ prepared_df <- dt %>%
       levels = hla_condition_levels
     ),
     
-    # Plotting value only. Raw T_cell_freq is retained and exported.
-    T_cell_freq_log10 = log10(T_cell_freq + config$pseudocount)
+    # This is the plotted value if using log10 axis
+    T_cell_freq_log10 = log10(T_cell_freq + pseudocount)
+  ) %>%
+  filter(
+    !is.na(sample),
+    sample != "",
+    !is.na(cohort_label),
+    !is.na(HLA_condition),
+    !is.na(T_cell_freq),
+    T_cell_freq >= 0
+  ) %>%
+  mutate(
+    dot_id = row_number()
   )
 
-dot_df <- prepared_df %>%
-  filter(is.na(exclusion_reason)) %>%
-  mutate(dot_id = row_number())
-
-excluded_rows <- prepared_df %>%
-  filter(!is.na(exclusion_reason)) %>%
-  select(
-    sample,
-    exclusion_reason,
-    cohort_label,
-    HLA_A2,
-    HLA_B7,
-    HLA_DR15,
-    HLA_condition_raw,
-    T_cell_freq
-  )
-
-
-# ----------------------------- #
-# 5. Dot-level source-data tables
-# ----------------------------- #
+# ============================================================
+# Table 1: pooled HLA-combination dot table
+# One row = one dot in the pooled graph
+# ============================================================
 
 dot_table_pooled <- dot_df %>%
   select(
@@ -416,6 +344,11 @@ dot_table_pooled <- dot_df %>%
     HLA_condition,
     T_cell_freq
   )
+
+# ============================================================
+# Table 2: cohort-split dot table
+# One row = one dot in the MS vs Control split graph
+# ============================================================
 
 dot_table_cohort_split <- dot_df %>%
   select(
@@ -435,10 +368,9 @@ dot_table_cohort_split <- dot_df %>%
     T_cell_freq
   )
 
-
-# ----------------------------- #
-# 6. Counts and summaries
-# ----------------------------- #
+# ============================================================
+# Extra useful summaries
+# ============================================================
 
 counts_by_HLA <- dot_df %>%
   count(
@@ -455,43 +387,554 @@ counts_by_HLA_and_cohort <- dot_df %>%
   ) %>%
   arrange(HLA_condition, cohort_label)
 
-summary_by_HLA <- summarise_frequency(
-  df = dot_df,
-  group_cols = c("HLA_condition")
+summary_by_HLA <- dot_df %>%
+  group_by(HLA_condition) %>%
+  summarise(
+    n = n(),
+    n_zero = sum(T_cell_freq == 0, na.rm = TRUE),
+    mean = mean(T_cell_freq, na.rm = TRUE),
+    sd = sd(T_cell_freq, na.rm = TRUE),
+    median = median(T_cell_freq, na.rm = TRUE),
+    IQR = paste0(
+      round(quantile(T_cell_freq, 0.25, na.rm = TRUE), 6),
+      " - ",
+      round(quantile(T_cell_freq, 0.75, na.rm = TRUE), 6)
+    ),
+    min_max = paste0(
+      round(min(T_cell_freq, na.rm = TRUE), 6),
+      " - ",
+      round(max(T_cell_freq, na.rm = TRUE), 6)
+    ),
+    .groups = "drop"
+  ) %>%
+  arrange(HLA_condition)
+
+summary_by_HLA_and_cohort <- dot_df %>%
+  group_by(HLA_condition, cohort_label) %>%
+  summarise(
+    n = n(),
+    n_zero = sum(T_cell_freq == 0, na.rm = TRUE),
+    mean = mean(T_cell_freq, na.rm = TRUE),
+    sd = sd(T_cell_freq, na.rm = TRUE),
+    median = median(T_cell_freq, na.rm = TRUE),
+    IQR = paste0(
+      round(quantile(T_cell_freq, 0.25, na.rm = TRUE), 6),
+      " - ",
+      round(quantile(T_cell_freq, 0.75, na.rm = TRUE), 6)
+    ),
+    min_max = paste0(
+      round(min(T_cell_freq, na.rm = TRUE), 6),
+      " - ",
+      round(max(T_cell_freq, na.rm = TRUE), 6)
+    ),
+    .groups = "drop"
+  ) %>%
+  arrange(HLA_condition, cohort_label)
+
+
+# ============================================================
+# Statistical tests
+# ============================================================
+#
+# Tests use the untransformed T_cell_freq values.
+#
+# 1. Kruskal-Wallis omnibus tests:
+#    - pooled across all participants
+#    - separately within Control and MS
+#
+# 2. Pairwise Wilcoxon rank-sum tests between HLA combinations:
+#    - pooled across all participants
+#    - separately within Control and MS
+#
+# 3. Wilcoxon rank-sum tests comparing MS vs Control:
+#    - separately within each HLA combination
+#
+# Both raw P-values and Benjamini-Hochberg FDR-adjusted
+# P-values are exported.
+# ============================================================
+
+format_test_p <- function(p) {
+  case_when(
+    is.na(p) ~ NA_character_,
+    p < 0.001 ~ "<0.001",
+    TRUE ~ sprintf("%.3f", p)
+  )
+}
+
+safe_kruskal <- function(data, analysis_set, cohort_subset) {
+
+  tmp <- data %>%
+    filter(
+      !is.na(HLA_condition),
+      !is.na(T_cell_freq)
+    ) %>%
+    mutate(
+      HLA_condition = droplevels(HLA_condition)
+    )
+
+  n_groups <- n_distinct(tmp$HLA_condition)
+
+  if (nrow(tmp) < 3 || n_groups < 2) {
+    return(
+      tibble(
+        analysis_set = analysis_set,
+        cohort_subset = cohort_subset,
+        test = "Kruskal-Wallis test",
+        n_total = nrow(tmp),
+        n_groups = n_groups,
+        statistic = NA_real_,
+        df = NA_real_,
+        raw_p = NA_real_,
+        note = "Not tested: fewer than two represented HLA groups"
+      )
+    )
+  }
+
+  test_result <- tryCatch(
+    kruskal.test(
+      T_cell_freq ~ HLA_condition,
+      data = tmp
+    ),
+    error = function(e) NULL
+  )
+
+  if (is.null(test_result)) {
+    return(
+      tibble(
+        analysis_set = analysis_set,
+        cohort_subset = cohort_subset,
+        test = "Kruskal-Wallis test",
+        n_total = nrow(tmp),
+        n_groups = n_groups,
+        statistic = NA_real_,
+        df = NA_real_,
+        raw_p = NA_real_,
+        note = "Test failed"
+      )
+    )
+  }
+
+  tibble(
+    analysis_set = analysis_set,
+    cohort_subset = cohort_subset,
+    test = "Kruskal-Wallis test",
+    n_total = nrow(tmp),
+    n_groups = n_groups,
+    statistic = unname(test_result$statistic),
+    df = unname(test_result$parameter),
+    raw_p = test_result$p.value,
+    note = NA_character_
+  )
+}
+
+kruskal_results <- bind_rows(
+  safe_kruskal(
+    data = dot_df,
+    analysis_set = "Pooled HLA comparison",
+    cohort_subset = "All"
+  ),
+  safe_kruskal(
+    data = dot_df %>% filter(cohort_label == "Control"),
+    analysis_set = "HLA comparison within cohort",
+    cohort_subset = "Control"
+  ),
+  safe_kruskal(
+    data = dot_df %>% filter(cohort_label == "MS"),
+    analysis_set = "HLA comparison within cohort",
+    cohort_subset = "MS"
+  )
+) %>%
+  mutate(
+    FDR_BH = p.adjust(raw_p, method = "BH"),
+    raw_p_label = format_test_p(raw_p),
+    FDR_BH_label = format_test_p(FDR_BH)
+  ) %>%
+  select(
+    analysis_set,
+    cohort_subset,
+    test,
+    n_total,
+    n_groups,
+    statistic,
+    df,
+    raw_p,
+    raw_p_label,
+    FDR_BH,
+    FDR_BH_label,
+    note
+  )
+
+run_pairwise_HLA_wilcox <- function(
+    data,
+    analysis_set,
+    cohort_subset
+) {
+
+  tmp <- data %>%
+    filter(
+      !is.na(HLA_condition),
+      !is.na(T_cell_freq)
+    ) %>%
+    mutate(
+      HLA_condition = droplevels(HLA_condition)
+    )
+
+  represented_groups <- levels(tmp$HLA_condition)
+
+  if (length(represented_groups) < 2) {
+    return(
+      tibble(
+        analysis_set = character(),
+        cohort_subset = character(),
+        group_1 = character(),
+        group_2 = character(),
+        n_group_1 = integer(),
+        n_group_2 = integer(),
+        median_group_1 = double(),
+        median_group_2 = double(),
+        median_difference_group_1_minus_group_2 = double(),
+        statistic_W = double(),
+        raw_p = double(),
+        note = character()
+      )
+    )
+  }
+
+  group_pairs <- combn(
+    represented_groups,
+    2,
+    simplify = FALSE
+  )
+
+  map_dfr(
+    group_pairs,
+    function(pair) {
+
+      pair_df <- tmp %>%
+        filter(HLA_condition %in% pair) %>%
+        mutate(
+          HLA_condition = factor(
+            as.character(HLA_condition),
+            levels = pair
+          )
+        )
+
+      group_1_values <- pair_df %>%
+        filter(HLA_condition == pair[1]) %>%
+        pull(T_cell_freq)
+
+      group_2_values <- pair_df %>%
+        filter(HLA_condition == pair[2]) %>%
+        pull(T_cell_freq)
+
+      n_group_1 <- length(group_1_values)
+      n_group_2 <- length(group_2_values)
+
+      median_group_1 <- ifelse(
+        n_group_1 > 0,
+        median(group_1_values, na.rm = TRUE),
+        NA_real_
+      )
+
+      median_group_2 <- ifelse(
+        n_group_2 > 0,
+        median(group_2_values, na.rm = TRUE),
+        NA_real_
+      )
+
+      if (n_group_1 == 0 || n_group_2 == 0) {
+        return(
+          tibble(
+            analysis_set = analysis_set,
+            cohort_subset = cohort_subset,
+            group_1 = pair[1],
+            group_2 = pair[2],
+            n_group_1 = n_group_1,
+            n_group_2 = n_group_2,
+            median_group_1 = median_group_1,
+            median_group_2 = median_group_2,
+            median_difference_group_1_minus_group_2 =
+              median_group_1 - median_group_2,
+            statistic_W = NA_real_,
+            raw_p = NA_real_,
+            note = "Not tested: one group has no observations"
+          )
+        )
+      }
+
+      test_result <- tryCatch(
+        suppressWarnings(
+          wilcox.test(
+            T_cell_freq ~ HLA_condition,
+            data = pair_df,
+            exact = FALSE
+          )
+        ),
+        error = function(e) NULL
+      )
+
+      tibble(
+        analysis_set = analysis_set,
+        cohort_subset = cohort_subset,
+        group_1 = pair[1],
+        group_2 = pair[2],
+        n_group_1 = n_group_1,
+        n_group_2 = n_group_2,
+        median_group_1 = median_group_1,
+        median_group_2 = median_group_2,
+        median_difference_group_1_minus_group_2 =
+          median_group_1 - median_group_2,
+        statistic_W = ifelse(
+          is.null(test_result),
+          NA_real_,
+          unname(test_result$statistic)
+        ),
+        raw_p = ifelse(
+          is.null(test_result),
+          NA_real_,
+          test_result$p.value
+        ),
+        note = ifelse(
+          is.null(test_result),
+          "Test failed",
+          NA_character_
+        )
+      )
+    }
+  )
+}
+
+pairwise_HLA_results <- bind_rows(
+  run_pairwise_HLA_wilcox(
+    data = dot_df,
+    analysis_set = "Pooled HLA comparison",
+    cohort_subset = "All"
+  ),
+  run_pairwise_HLA_wilcox(
+    data = dot_df %>% filter(cohort_label == "Control"),
+    analysis_set = "HLA comparison within cohort",
+    cohort_subset = "Control"
+  ),
+  run_pairwise_HLA_wilcox(
+    data = dot_df %>% filter(cohort_label == "MS"),
+    analysis_set = "HLA comparison within cohort",
+    cohort_subset = "MS"
+  )
+) %>%
+  group_by(analysis_set, cohort_subset) %>%
+  mutate(
+    # Primary FDR correction: within each logical family of comparisons
+    FDR_BH_within_set = p.adjust(raw_p, method = "BH")
+  ) %>%
+  ungroup() %>%
+  mutate(
+    # Also supplied for maximum transparency across every pairwise HLA test
+    FDR_BH_all_pairwise = p.adjust(raw_p, method = "BH"),
+    raw_p_label = format_test_p(raw_p),
+    FDR_BH_within_set_label = format_test_p(FDR_BH_within_set),
+    FDR_BH_all_pairwise_label = format_test_p(FDR_BH_all_pairwise)
+  ) %>%
+  select(
+    analysis_set,
+    cohort_subset,
+    group_1,
+    group_2,
+    n_group_1,
+    n_group_2,
+    median_group_1,
+    median_group_2,
+    median_difference_group_1_minus_group_2,
+    statistic_W,
+    raw_p,
+    raw_p_label,
+    FDR_BH_within_set,
+    FDR_BH_within_set_label,
+    FDR_BH_all_pairwise,
+    FDR_BH_all_pairwise_label,
+    note
+  )
+
+run_cohort_test_within_HLA <- function(data) {
+
+  represented_groups <- levels(droplevels(data$HLA_condition))
+
+  map_dfr(
+    represented_groups,
+    function(hla_group) {
+
+      tmp <- data %>%
+        filter(
+          HLA_condition == hla_group,
+          !is.na(cohort_label),
+          !is.na(T_cell_freq)
+        ) %>%
+        mutate(
+          cohort_label = droplevels(cohort_label)
+        )
+
+      control_values <- tmp %>%
+        filter(cohort_label == "Control") %>%
+        pull(T_cell_freq)
+
+      ms_values <- tmp %>%
+        filter(cohort_label == "MS") %>%
+        pull(T_cell_freq)
+
+      n_control <- length(control_values)
+      n_MS <- length(ms_values)
+
+      median_control <- ifelse(
+        n_control > 0,
+        median(control_values, na.rm = TRUE),
+        NA_real_
+      )
+
+      median_MS <- ifelse(
+        n_MS > 0,
+        median(ms_values, na.rm = TRUE),
+        NA_real_
+      )
+
+      if (n_control == 0 || n_MS == 0) {
+        return(
+          tibble(
+            HLA_condition = hla_group,
+            n_Control = n_control,
+            n_MS = n_MS,
+            median_Control = median_control,
+            median_MS = median_MS,
+            median_difference_MS_minus_Control =
+              median_MS - median_control,
+            statistic_W = NA_real_,
+            raw_p = NA_real_,
+            note = "Not tested: only one cohort represented"
+          )
+        )
+      }
+
+      test_result <- tryCatch(
+        suppressWarnings(
+          wilcox.test(
+            T_cell_freq ~ cohort_label,
+            data = tmp,
+            exact = FALSE
+          )
+        ),
+        error = function(e) NULL
+      )
+
+      tibble(
+        HLA_condition = hla_group,
+        n_Control = n_control,
+        n_MS = n_MS,
+        median_Control = median_control,
+        median_MS = median_MS,
+        median_difference_MS_minus_Control =
+          median_MS - median_control,
+        statistic_W = ifelse(
+          is.null(test_result),
+          NA_real_,
+          unname(test_result$statistic)
+        ),
+        raw_p = ifelse(
+          is.null(test_result),
+          NA_real_,
+          test_result$p.value
+        ),
+        note = ifelse(
+          is.null(test_result),
+          "Test failed",
+          NA_character_
+        )
+      )
+    }
+  )
+}
+
+cohort_within_HLA_results <- run_cohort_test_within_HLA(dot_df) %>%
+  mutate(
+    FDR_BH = p.adjust(raw_p, method = "BH"),
+    raw_p_label = format_test_p(raw_p),
+    FDR_BH_label = format_test_p(FDR_BH)
+  ) %>%
+  select(
+    HLA_condition,
+    n_Control,
+    n_MS,
+    median_Control,
+    median_MS,
+    median_difference_MS_minus_Control,
+    statistic_W,
+    raw_p,
+    raw_p_label,
+    FDR_BH,
+    FDR_BH_label,
+    note
+  )
+
+
+# ============================================================
+# Export CSV files
+# ============================================================
+
+write.csv(
+  dot_table_pooled,
+  file = file.path(out_dir, "dot_level_frequencies_by_HLA_condition_pooled.csv"),
+  row.names = FALSE
 )
 
-summary_by_HLA_and_cohort <- summarise_frequency(
-  df = dot_df,
-  group_cols = c("HLA_condition", "cohort_label")
+write.csv(
+  dot_table_cohort_split,
+  file = file.path(out_dir, "dot_level_frequencies_by_HLA_condition_and_cohort.csv"),
+  row.names = FALSE
+)
+
+write.csv(
+  counts_by_HLA,
+  file = file.path(out_dir, "counts_by_HLA_condition.csv"),
+  row.names = FALSE
+)
+
+write.csv(
+  counts_by_HLA_and_cohort,
+  file = file.path(out_dir, "counts_by_HLA_condition_and_cohort.csv"),
+  row.names = FALSE
+)
+
+write.csv(
+  summary_by_HLA,
+  file = file.path(out_dir, "summary_frequency_by_HLA_condition.csv"),
+  row.names = FALSE
+)
+
+write.csv(
+  summary_by_HLA_and_cohort,
+  file = file.path(out_dir, "summary_frequency_by_HLA_condition_and_cohort.csv"),
+  row.names = FALSE
 )
 
 
-# ----------------------------- #
-# 7. Export CSV files
-# ----------------------------- #
+write.csv(
+  kruskal_results,
+  file = file.path(out_dir, "stats_Kruskal_Wallis_omnibus.csv"),
+  row.names = FALSE
+)
 
-pooled_dot_path <- file.path(config$output_dir, config$pooled_dot_csv)
-cohort_dot_path <- file.path(config$output_dir, config$cohort_dot_csv)
-counts_hla_path <- file.path(config$output_dir, config$counts_hla_csv)
-counts_hla_cohort_path <- file.path(config$output_dir, config$counts_hla_cohort_csv)
-summary_hla_path <- file.path(config$output_dir, config$summary_hla_csv)
-summary_hla_cohort_path <- file.path(config$output_dir, config$summary_hla_cohort_csv)
-excluded_rows_path <- file.path(config$output_dir, config$excluded_rows_csv)
+write.csv(
+  pairwise_HLA_results,
+  file = file.path(out_dir, "stats_pairwise_HLA_Wilcoxon.csv"),
+  row.names = FALSE
+)
 
-write_csv(dot_table_pooled, pooled_dot_path)
-write_csv(dot_table_cohort_split, cohort_dot_path)
-write_csv(counts_by_HLA, counts_hla_path)
-write_csv(counts_by_HLA_and_cohort, counts_hla_cohort_path)
-write_csv(summary_by_HLA, summary_hla_path)
-write_csv(summary_by_HLA_and_cohort, summary_hla_cohort_path)
-write_csv(excluded_rows, excluded_rows_path)
+write.csv(
+  cohort_within_HLA_results,
+  file = file.path(out_dir, "stats_MS_vs_Control_within_HLA.csv"),
+  row.names = FALSE
+)
 
-
-# ----------------------------- #
-# 8. Export one Excel workbook with all tables
-# ----------------------------- #
-
-workbook_path <- file.path(config$output_dir, config$workbook_xlsx)
+# ============================================================
+# Export one Excel workbook with all tables
+# ============================================================
 
 wb <- createWorkbook()
 
@@ -513,8 +956,15 @@ writeData(wb, "Summary_by_HLA", summary_by_HLA)
 addWorksheet(wb, "Summary_by_HLA_cohort")
 writeData(wb, "Summary_by_HLA_cohort", summary_by_HLA_and_cohort)
 
-addWorksheet(wb, "Excluded_rows")
-writeData(wb, "Excluded_rows", excluded_rows)
+
+addWorksheet(wb, "Stats_Kruskal_Wallis")
+writeData(wb, "Stats_Kruskal_Wallis", kruskal_results)
+
+addWorksheet(wb, "Stats_pairwise_HLA")
+writeData(wb, "Stats_pairwise_HLA", pairwise_HLA_results)
+
+addWorksheet(wb, "Stats_cohort_within_HLA")
+writeData(wb, "Stats_cohort_within_HLA", cohort_within_HLA_results)
 
 addWorksheet(wb, "Notes")
 writeData(
@@ -526,97 +976,57 @@ writeData(
       "Input sheet",
       "Sample column used",
       "Frequency column",
-      "HLA columns",
       "Excluded group",
       "Pseudocount",
       "Pooled dot table",
       "Cohort split dot table",
-      "BioRender note"
+      "Statistical scale",
+      "Omnibus tests",
+      "Pairwise HLA tests",
+      "Cohort tests",
+      "Primary pairwise FDR",
+      "Additional global pairwise FDR"
     ),
     value = c(
-      config$input_file,
-      config$input_sheet,
+      input_file,
+      input_sheet,
       sample_col,
-      config$frequency_col,
-      paste(
-        config$hla_a2_col,
-        config$hla_b7_col,
-        config$hla_dr15_col,
-        sep = "; "
-      ),
+      "T_cell_freq",
       "A2-B7-DR15- triple-negative individuals excluded",
-      config$pseudocount,
+      pseudocount,
       "One row per dot, grouped only by HLA_condition",
       "One row per dot, grouped by HLA_condition and cohort_label",
-      "The exported dot-level source-data tables were imported into BioRender.com for graphing and statistical testing."
+      "All tests use raw, untransformed T_cell_freq values",
+      "Kruskal-Wallis tests compare HLA combinations pooled and within each cohort",
+      "Two-sided Wilcoxon rank-sum tests compare every represented HLA pair",
+      "Two-sided Wilcoxon rank-sum tests compare MS vs Control within each HLA combination",
+      "FDR_BH_within_set adjusts pairwise tests separately within pooled, Control-only and MS-only sets",
+      "FDR_BH_all_pairwise adjusts across every pairwise HLA test in the script"
     )
   )
 )
 
+xlsx_out <- file.path(out_dir, "HLA_A2_B7_DR15_dot_level_frequency_tables.xlsx")
+
 saveWorkbook(
   wb,
-  workbook_path,
+  xlsx_out,
   overwrite = TRUE
 )
 
+# ============================================================
+# Print checks
+# ============================================================
 
-# ----------------------------- #
-# 9. Save session information
-# ----------------------------- #
-
-session_info_path <- file.path(config$output_dir, config$session_info_file)
-
-writeLines(
-  c(
-    "Configuration:",
-    capture.output(str(config)),
-    "",
-    "Sample column used:",
-    sample_col,
-    "",
-    "Number of input rows:",
-    as.character(nrow(dt)),
-    "",
-    "Number of retained dot-level rows:",
-    as.character(nrow(dot_df)),
-    "",
-    "Number of excluded rows:",
-    as.character(nrow(excluded_rows)),
-    "",
-    "Counts by HLA condition:",
-    capture.output(print(counts_by_HLA)),
-    "",
-    "Counts by HLA condition and cohort:",
-    capture.output(print(counts_by_HLA_and_cohort)),
-    "",
-    "BioRender note:",
-    "The exported dot-level source-data tables were imported into BioRender.com for graphing and statistical testing.",
-    "",
-    "Output files:",
-    pooled_dot_path,
-    cohort_dot_path,
-    counts_hla_path,
-    counts_hla_cohort_path,
-    summary_hla_path,
-    summary_hla_cohort_path,
-    excluded_rows_path,
-    workbook_path,
-    "",
-    "Session information:",
-    capture.output(sessionInfo())
-  ),
-  session_info_path
+capture.output(
+  sessionInfo(),
+  file = session_info_file
 )
 
-
-# ----------------------------- #
-# 10. Print checks
-# ----------------------------- #
-
 message("Done.")
-message("Output folder: ", config$output_dir)
-message("Excel workbook: ", workbook_path)
-message("Session info: ", session_info_path)
+message("Output folder: ", out_dir)
+message("Excel workbook: ", xlsx_out)
+message("Session information: ", session_info_file)
 
 message("\nCounts by HLA condition:")
 print(counts_by_HLA)
@@ -629,3 +1039,13 @@ print(head(dot_table_pooled, 20))
 
 message("\nFirst rows of cohort-split dot table:")
 print(head(dot_table_cohort_split, 20))
+
+message("\nKruskal-Wallis omnibus tests:")
+print(kruskal_results)
+
+message("\nPairwise HLA Wilcoxon tests:")
+print(pairwise_HLA_results)
+
+message("\nMS vs Control within each HLA combination:")
+print(cohort_within_HLA_results)
+
